@@ -11,10 +11,13 @@ class Utilisateur(Base):
     prenom = Column(String(50), nullable=False)
     email = Column(String(100), unique=True, nullable=False)
     cin = Column(Integer, unique=True, nullable=False)
+    telp = Column(String(20), nullable=True)  
+    image = Column(String(255), nullable=True)  
     mdp_hash = Column(String(255), nullable=True)
 
     etudiant = relationship("Etudiant", back_populates="utilisateur", uselist=False)
     enseignant = relationship("Enseignant", back_populates="utilisateur", uselist=False)
+    administratif = relationship("Administratif", back_populates="utilisateur", uselist=False)
 
 
 class Etudiant(Base):
@@ -29,18 +32,32 @@ class Etudiant(Base):
     specialite = relationship("Specialite", back_populates="etudiants")
 
 
-
 class Enseignant(Base):
     __tablename__ = "enseignant"
 
     id = Column(Integer, ForeignKey("utilisateur.id"), primary_key=True)
     id_departement = Column(Integer, ForeignKey("departement.id"), nullable=False)
-    is_chef = Column(Boolean, default=False)
-    is_admin = Column(Boolean, default=False)
 
     utilisateur = relationship("Utilisateur", back_populates="enseignant")
     departement = relationship("Departement", back_populates="enseignants")
+    chef = relationship("Chef", back_populates="enseignant", uselist=False)
 
+
+class Chef(Base):
+    __tablename__ = "chef"
+
+    id = Column(Integer, ForeignKey("enseignant.id"), primary_key=True)
+    date_nomination = Column(String(50), nullable=True) 
+    enseignant = relationship("Enseignant", back_populates="chef")
+
+
+class Administratif(Base):
+    __tablename__ = "administratif"
+
+    id = Column(Integer, ForeignKey("utilisateur.id"),  primary_key=True)
+    poste = Column(String(100), nullable=True) 
+
+    utilisateur = relationship("Utilisateur", back_populates="administratif")
 
 
 class Departement(Base):
@@ -51,7 +68,6 @@ class Departement(Base):
 
     enseignants = relationship("Enseignant", back_populates="departement")
     specialites = relationship("Specialite", back_populates="departement")
-
 
 
 class Specialite(Base):
@@ -66,15 +82,12 @@ class Specialite(Base):
     etudiants = relationship("Etudiant", back_populates="specialite")
 
 
-
 class Niveau(Base):
     __tablename__ = "niveau"
 
     id = Column(Integer, primary_key=True, index=True)
     nom = Column(String(50), unique=True, nullable=False)
-
     groupes = relationship("Groupe", back_populates="niveau")
-
 
 
 class Groupe(Base):

@@ -1,5 +1,7 @@
 from pydantic import BaseModel, EmailStr
-from typing import Optional, List
+from typing import Optional
+
+
 
 
 class SignupRequest(BaseModel):
@@ -12,16 +14,22 @@ class SigninRequest(BaseModel):
     password: str
 
 
+
+
 class UserResponse(BaseModel):
     id: int
     cin: str
     nom: str
     prenom: str
     email: EmailStr
-  
+    telp: Optional[str] = None
+    image: Optional[str] = None
 
     class Config:
-        orm_mode = True 
+        orm_mode = True
+
+
+
 
 class EtudiantResponse(BaseModel):
     id: int
@@ -32,11 +40,29 @@ class EtudiantResponse(BaseModel):
         orm_mode = True
 
 
+
+
 class EnseignantResponse(BaseModel):
     id: int
     id_departement: int
-    is_chef: bool
-    is_admin: bool
+
+    class Config:
+        orm_mode = True
+
+
+
+class ChefResponse(BaseModel):
+    id: int
+    date_nomination: Optional[str] = None
+
+    class Config:
+        orm_mode = True
+
+
+
+class AdministratifResponse(BaseModel):
+    id: int
+    poste: Optional[str] = None
 
     class Config:
         orm_mode = True
