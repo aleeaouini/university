@@ -12,6 +12,7 @@ export default function Login() {
   const [loginSuccess, setLoginSuccess] = useState("");
 
   
+
   const validateForm = () => {
     if (!cin || !password) {
       setLoginError("cin and password are required");
