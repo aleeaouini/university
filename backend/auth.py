@@ -77,10 +77,10 @@ async def signup(req: schemas.SignupRequest, db: Session = Depends(get_db)):
         roles.append("etudiant")
     if user.enseignant:
         roles.append("enseignant")
-        if user.enseignant.is_chef:
+        if user.enseignant.chef:
             roles.append("chef")
-        if user.enseignant.is_admin:
-            roles.append("admin")
+    if user.administratif:
+        roles.append("administratif")
 
     body = f"""
 Bonjour {user.nom},
@@ -135,10 +135,17 @@ def signin(req: schemas.SigninRequest, db: Session = Depends(get_db)):
         token = auth_utils.create_access_token({"sub": user.email, "roles": roles})
 
         return {
-            "access_token": token,
-            "token_type": "bearer",
-            "roles": roles
-        }
+    "access_token": token,
+    "token_type": "bearer",
+    "roles": roles,
+    "user": {
+    "id": user.id,
+    "email": user.email,
+    "phone": user.telp,
+    "image": user.image
+}
+
+}
 
     except HTTPException:
         raise

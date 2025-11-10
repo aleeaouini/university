@@ -3,9 +3,14 @@ const mysql = require('mysql');
 const bcrypt = require('bcrypt');
 const fileUpload = require('express-fileupload');
 const path = require('path');
-
+const cors = require('cors');
 const app = express();
 const PORT = 3003;
+
+app.use(cors({
+    origin: 'http://localhost:5173', 
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+}));
 
 //middleware
 app.use(express.json());
@@ -31,8 +36,17 @@ connection.connect(function(err) {
     console.log('Connecté à MySQL !');
 });
 
+
+
+app.get('/test', (req, res) => {
+    res.send(' Backend is alive');
+});
+
 // Service pour éditer le profil
 app.post('/edit-profile/:id', function(req, res) {
+    console.log(' Requête reçue pour édition du profil:', req.params.id);
+    console.log('Body:', req.body);
+    console.log('Files:', req.files);
     const { id } = req.params;
     const { email, motdepasse, telp } = req.body;
     let image = null;
