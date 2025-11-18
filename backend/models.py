@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey
+from sqlalchemy import Column, Integer, String, Date, Time, ForeignKey, Boolean, PrimaryKeyConstraint
 from sqlalchemy.orm import relationship
 from database import Base
 
@@ -11,9 +11,10 @@ class Utilisateur(Base):
     prenom = Column(String(50), nullable=False)
     email = Column(String(100), unique=True, nullable=False)
     cin = Column(Integer, unique=True, nullable=False)
-    telp = Column(String(20), nullable=True)  
-    image = Column(String(255), nullable=True)  
+    telp = Column(String(20), nullable=True)
+    image = Column(String(255), nullable=True)
     mdp_hash = Column(String(255), nullable=True)
+    role = Column(String(20), nullable=False)
 
     etudiant = relationship("Etudiant", back_populates="utilisateur", uselist=False)
     enseignant = relationship("Enseignant", back_populates="utilisateur", uselist=False)
@@ -39,23 +40,27 @@ class Enseignant(Base):
     id_departement = Column(Integer, ForeignKey("departement.id"), nullable=False)
 
     utilisateur = relationship("Utilisateur", back_populates="enseignant")
-    departement = relationship("Departement", back_populates="enseignants")
     chef = relationship("Chef", back_populates="enseignant", uselist=False)
+    departement = relationship("Departement", back_populates="enseignants")
+    seances = relationship("Seance", back_populates="enseignant")
+
 
 
 class Chef(Base):
     __tablename__ = "chef"
 
     id = Column(Integer, ForeignKey("enseignant.id"), primary_key=True)
-    date_nomination = Column(String(50), nullable=True) 
+    date_nomination = Column(String(50), nullable=True)
+
     enseignant = relationship("Enseignant", back_populates="chef")
+    departements = relationship("Departement", back_populates="chef")
 
 
 class Administratif(Base):
     __tablename__ = "administratif"
 
-    id = Column(Integer, ForeignKey("utilisateur.id"),  primary_key=True)
-    poste = Column(String(100), nullable=True) 
+    id = Column(Integer, ForeignKey("utilisateur.id"), primary_key=True)
+    poste = Column(String(100), nullable=True)
 
     utilisateur = relationship("Utilisateur", back_populates="administratif")
 
@@ -65,9 +70,11 @@ class Departement(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     nom = Column(String(100), unique=True, nullable=False)
+    id_chef = Column(Integer, ForeignKey("chef.id"), nullable=True)
 
     enseignants = relationship("Enseignant", back_populates="departement")
     specialites = relationship("Specialite", back_populates="departement")
+    chef = relationship("Chef", back_populates="departements")
 
 
 class Specialite(Base):
@@ -75,10 +82,10 @@ class Specialite(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     nom = Column(String(100), unique=True, nullable=False)
-    id_departement = Column(Integer, ForeignKey("departement.id"))
+    id_departement = Column(Integer, ForeignKey("departement.id"), nullable=False)
 
     departement = relationship("Departement", back_populates="specialites")
-    groupes = relationship("Groupe", back_populates="specialite")
+    niveaux = relationship("Niveau", back_populates="specialite")
     etudiants = relationship("Etudiant", back_populates="specialite")
 
 
@@ -87,7 +94,12 @@ class Niveau(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     nom = Column(String(50), unique=True, nullable=False)
+    id_specialite = Column(Integer, ForeignKey("specialite.id"), nullable=False)
+
+    specialite = relationship("Specialite", back_populates="niveaux")
     groupes = relationship("Groupe", back_populates="niveau")
+    matieres = relationship("Matiere", back_populates="niveau")
+
 
 
 class Groupe(Base):
@@ -95,9 +107,79 @@ class Groupe(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     nom = Column(String(50), nullable=False)
-    id_niveau = Column(Integer, ForeignKey("niveau.id"))
-    id_specialite = Column(Integer, ForeignKey("specialite.id"))
+    id_niveau = Column(Integer, ForeignKey("niveau.id"), nullable=False)
 
     niveau = relationship("Niveau", back_populates="groupes")
-    specialite = relationship("Specialite", back_populates="groupes")
     etudiants = relationship("Etudiant", back_populates="groupe")
+    seances = relationship("Seance", back_populates="groupe")
+
+
+
+class Matiere(Base):
+    __tablename__ = "matiere"
+
+    id = Column(Integer, primary_key=True, index=True)
+    nom = Column(String(100), nullable=False)
+    id_niveau = Column(Integer, ForeignKey("niveau.id"), nullable=False)
+
+    niveau = relationship("Niveau", back_populates="matieres")
+    seances = relationship("Seance", back_populates="matiere")
+
+
+class Salle(Base):
+    __tablename__ = "salle"
+
+    id = Column(Integer, primary_key=True, index=True)
+    type = Column(String(100), nullable=False)
+    capacite = Column(Integer, nullable=False)
+
+    seances = relationship("Seance", back_populates="salle")
+
+
+class Seance(Base):
+    __tablename__ = "seance"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    date = Column(Date, nullable=False)
+    heure_debut = Column(Time, nullable=False)
+    heure_fin = Column(Time, nullable=False)
+
+    id_salle = Column(Integer, ForeignKey("salle.id"), nullable=False)
+    id_matiere = Column(Integer, ForeignKey("matiere.id"), nullable=False)
+    id_groupe = Column(Integer, ForeignKey("groupe.id"), nullable=False)
+    id_enseignant = Column(Integer, ForeignKey("enseignant.id"), nullable=False)
+
+    is_presente = Column(Boolean, default=False)
+
+    salle = relationship("Salle", back_populates="seances")
+    matiere = relationship("Matiere", back_populates="seances")
+    groupe = relationship("Groupe", back_populates="seances")
+    enseignant = relationship("Enseignant", back_populates="seances")
+    absences = relationship("Absence", back_populates="seance")
+
+class Message(Base):
+    __tablename__ = "message"
+
+    id = Column(Integer, primary_key=True, index=True)
+    id_expediteur = Column(Integer, ForeignKey("utilisateur.id"), nullable=False)
+    id_destinataire = Column(Integer, ForeignKey("utilisateur.id"), nullable=False)
+
+    contenu = Column(String(1000), nullable=False)
+    date = Column(Date, nullable=False)
+
+    expediteur = relationship("Utilisateur", foreign_keys=[id_expediteur])
+    destinataire = relationship("Utilisateur", foreign_keys=[id_destinataire])
+
+
+class Absence(Base):
+    __tablename__ = "absence"
+
+    id = Column(Integer, primary_key=True, index=True)
+    id_etudiant = Column(Integer, ForeignKey("etudiant.id"), nullable=False)
+    id_seance = Column(Integer, ForeignKey("seance.id"), nullable=False)
+
+    statut = Column(String(20), nullable=False)
+
+    etudiant = relationship("Etudiant")
+    seance = relationship("Seance")

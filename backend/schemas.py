@@ -24,6 +24,7 @@ class UserResponse(BaseModel):
     email: EmailStr
     telp: Optional[str] = None
     image: Optional[str] = None
+    role: Optional[str] = None
 
     class Config:
         orm_mode = True
