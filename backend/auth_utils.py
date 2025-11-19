@@ -8,7 +8,6 @@ MAX_BCRYPT_LENGTH = 72
 SECRET_KEY = os.getenv("SECRET_KEY", "default_secret_key")
 ALGORITHM = "HS256"
 
-
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
@@ -26,7 +25,6 @@ def verify_password(plain: str, hashed: str) -> bool:
     try:
         return pwd_context.verify(truncated, hashed)
     except ValueError:
-        
         legacy_sha = hashlib.sha256(plain.encode()).hexdigest()
         return legacy_sha == hashed
     except Exception as e:
@@ -35,7 +33,6 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 def create_access_token(data: dict, expires_delta: int = 30) -> str:
-    
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(minutes=expires_delta)
     to_encode.update({"exp": expire})

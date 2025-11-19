@@ -9,7 +9,7 @@ import models, schemas, database, auth_utils
 import os
 from dotenv import load_dotenv
 
-load_dotenv() 
+load_dotenv()
 
 EMAIL_USER = os.getenv("EMAIL_USER")
 EMAIL_PASS = os.getenv("EMAIL_PASS")
@@ -44,9 +44,11 @@ async def send_email(to_email: str, subject: str, body: str):
         password=EMAIL_PASS
     )
 
+
 def generate_random_password(length: int = 10):
     chars = string.ascii_letters + string.digits
     return ''.join(secrets.choice(chars) for _ in range(length))
+
 
 @router.post("/signup")
 async def signup(req: schemas.SignupRequest, db: Session = Depends(get_db)):
@@ -63,25 +65,31 @@ async def signup(req: schemas.SignupRequest, db: Session = Depends(get_db)):
     if user.mdp_hash and user.mdp_hash.strip():
         raise HTTPException(status_code=400, detail="Utilisateur déjà activé")
 
-    
-    plain_password = generate_random_password(length=12)  
-    plain_password = plain_password.encode('utf-8')[:72].decode('utf-8', errors='ignore')
-
+    # Generate password
+    plain_password = generate_random_password(12)
+    plain_password = plain_password.encode("utf-8")[:72].decode("utf-8", errors="ignore")
     hashed_password = auth_utils.hash_password(plain_password)
     user.mdp_hash = hashed_password
     db.commit()
     db.refresh(user)
 
-    roles = []
-    if user.etudiant:
-        roles.append("etudiant")
-    if user.enseignant:
-        roles.append("enseignant")
-        if user.enseignant.chef:
-            roles.append("chef")
-    if user.administratif:
-        roles.append("administratif")
+    # Insert into role table with nullable fields if not exists
+    if user.role == "etudiant" and not user.etudiant:
+        new_etudiant = models.Etudiant(id=user.id, id_groupe=None, id_specialite=None)
+        db.add(new_etudiant)
 
+    if user.role == "enseignant" and not user.enseignant:
+        new_enseignant = models.Enseignant(id=user.id, id_departement=None)
+        db.add(new_enseignant)
+
+    if user.role == "administratif" and not user.administratif:
+        new_admin = models.Administratif(id=user.id, poste=None)
+        db.add(new_admin)
+
+    db.commit()
+    db.refresh(user)
+
+    # Send email
     body = f"""
 Bonjour {user.nom},
 
@@ -96,7 +104,7 @@ Veuillez conserver ce mot de passe en lieu sûr.
 Cordialement,
 L’équipe d’administration.
 """
-
+    
     await send_email(user.email, "Activation de votre compte", body)
     return {"message": "Compte activé et mot de passe envoyé par email"}
 
@@ -112,40 +120,40 @@ def signin(req: schemas.SigninRequest, db: Session = Depends(get_db)):
         if not user or not user.mdp_hash:
             raise HTTPException(status_code=401, detail="Identifiants invalides")
 
-    
         if not auth_utils.verify_password(req.password, user.mdp_hash):
             raise HTTPException(status_code=401, detail="Identifiants invalides")
 
-        
-        if len(user.mdp_hash) == 64: 
+        # Rehash legacy SHA passwords
+        if len(user.mdp_hash) == 64:
             user.mdp_hash = auth_utils.hash_password(req.password)
             db.commit()
             db.refresh(user)
 
+        # Determine roles
         roles = []
-        if user.etudiant:
+        if user.role == "etudiant":
             roles.append("etudiant")
-        if user.enseignant:
+        if user.role == "enseignant":
             roles.append("enseignant")
-            if user.enseignant.is_chef:
+            if getattr(user.enseignant, "chef", None):
                 roles.append("chef")
-            if user.enseignant.is_admin:
-                roles.append("admin")
+        if user.role == "administratif":
+            roles.append("administratif")
 
+        # Create token
         token = auth_utils.create_access_token({"sub": user.email, "roles": roles})
 
         return {
-    "access_token": token,
-    "token_type": "bearer",
-    "roles": roles,
-    "user": {
-    "id": user.id,
-    "email": user.email,
-    "phone": user.telp,
-    "image": user.image
-}
-
-}
+            "access_token": token,
+            "token_type": "bearer",
+            "roles": roles,
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "phone": user.telp,
+                "image": user.image
+            }
+        }
 
     except HTTPException:
         raise
