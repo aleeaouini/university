@@ -1,3 +1,4 @@
+from ast import Index
 from sqlalchemy import Column, Integer, String, Date, Time, ForeignKey, Boolean, PrimaryKeyConstraint
 from sqlalchemy.orm import relationship
 from database import Base
@@ -135,20 +136,23 @@ class Salle(Base):
 
     seances = relationship("Seance", back_populates="salle")
 
-
 class Seance(Base):
     __tablename__ = "seance"
 
     id = Column(Integer, primary_key=True, index=True)
-
-    date = Column(Date, nullable=False)
+    day_of_week = Column(Integer, nullable=True)
+    specific_date = Column(Date, nullable=True)   
     heure_debut = Column(Time, nullable=False)
     heure_fin = Column(Time, nullable=False)
 
+   
     id_salle = Column(Integer, ForeignKey("salle.id"), nullable=False)
     id_matiere = Column(Integer, ForeignKey("matiere.id"), nullable=False)
     id_groupe = Column(Integer, ForeignKey("groupe.id"), nullable=False)
     id_enseignant = Column(Integer, ForeignKey("enseignant.id"), nullable=False)
+
+    
+    created_by = Column(Integer, ForeignKey("utilisateur.id"), nullable=True)
 
     is_presente = Column(Boolean, default=False)
 
@@ -157,6 +161,30 @@ class Seance(Base):
     groupe = relationship("Groupe", back_populates="seances")
     enseignant = relationship("Enseignant", back_populates="seances")
     absences = relationship("Absence", back_populates="seance")
+
+    __table_args__ = (
+        
+        Index('ix_seance_salle_day', 'id_salle', 'day_of_week'),
+        Index('ix_seance_enseignant_day', 'id_enseignant', 'day_of_week'),
+        Index('ix_seance_groupe_day', 'id_groupe', 'day_of_week'),
+        Index('ix_seance_specific_date', 'specific_date'),
+    )
+
+
+class Absence(Base):
+    __tablename__ = "absence"
+
+    id = Column(Integer, primary_key=True, index=True)
+    id_etudiant = Column(Integer, ForeignKey("etudiant.id"), nullable=False)
+    id_seance = Column(Integer, ForeignKey("seance.id"), nullable=False)
+
+   
+    date = Column(Date, nullable=False)
+
+    statut = Column(String(20), nullable=False)
+
+    etudiant = relationship("Etudiant")
+    seance = relationship("Seance", back_populates="absences")
 
 class Message(Base):
     __tablename__ = "message"
@@ -172,14 +200,3 @@ class Message(Base):
     destinataire = relationship("Utilisateur", foreign_keys=[id_destinataire])
 
 
-class Absence(Base):
-    __tablename__ = "absence"
-
-    id = Column(Integer, primary_key=True, index=True)
-    id_etudiant = Column(Integer, ForeignKey("etudiant.id"), nullable=False)
-    id_seance = Column(Integer, ForeignKey("seance.id"), nullable=False)
-
-    statut = Column(String(20), nullable=False)
-
-    etudiant = relationship("Etudiant")
-    seance = relationship("Seance")
