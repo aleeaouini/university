@@ -1,4 +1,4 @@
-from ast import Index
+from sqlalchemy import Index
 from sqlalchemy import Column, Integer, String, Date, Time, ForeignKey, Boolean, PrimaryKeyConstraint
 from sqlalchemy.orm import relationship
 from database import Base
@@ -38,11 +38,9 @@ class Enseignant(Base):
     __tablename__ = "enseignant"
 
     id = Column(Integer, ForeignKey("utilisateur.id"), primary_key=True)
-    id_departement = Column(Integer, ForeignKey("departement.id"), nullable=False)
 
     utilisateur = relationship("Utilisateur", back_populates="enseignant")
     chef = relationship("Chef", back_populates="enseignant", uselist=False)
-    departement = relationship("Departement", back_populates="enseignants")
     seances = relationship("Seance", back_populates="enseignant")
 
 
@@ -200,3 +198,38 @@ class Message(Base):
     destinataire = relationship("Utilisateur", foreign_keys=[id_destinataire])
 
 
+
+from sqlalchemy import Table, Column, Integer, String, Date, ForeignKey
+from sqlalchemy.orm import relationship
+
+# Association table for students registering for events
+evenement_etudiants = Table(
+    "evenement_etudiants",
+    Base.metadata,
+    Column("evenement_id", Integer, ForeignKey("evenement.id"), primary_key=True),
+    Column("etudiant_id", Integer, ForeignKey("etudiant.id"), primary_key=True),
+)
+
+# Association table for teachers registering for events
+evenement_enseignants = Table(
+    "evenement_enseignants",
+    Base.metadata,
+    Column("evenement_id", Integer, ForeignKey("evenement.id"), primary_key=True),
+    Column("enseignant_id", Integer, ForeignKey("enseignant.id"), primary_key=True),
+)
+
+class Evenement(Base):
+    __tablename__ = "evenement"
+
+    id = Column(Integer, primary_key=True, index=True)
+    titre = Column(String(255), nullable=False)
+    type = Column(String(50), nullable=False)
+    date = Column(Date, nullable=False)
+    description = Column(String(1000), nullable=True)
+    
+    created_by_id = Column(Integer, ForeignKey("administratif.id"), nullable=False)
+    created_by = relationship("Administratif", backref="evenements_created")
+
+    # Many-to-many relationships
+    etudiants = relationship("Etudiant", secondary=evenement_etudiants, backref="evenements")
+    enseignants = relationship("Enseignant", secondary=evenement_enseignants, backref="evenements")
