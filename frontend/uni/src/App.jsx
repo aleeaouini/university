@@ -3,6 +3,7 @@ import Signup from './pages/Signup';
 import Login from './pages/Login';
 import './index.css';
 import CsvPage from './pages/Csv';
+import Home from './pages/Home';
 
 import EditProfile from './pages/Editeprofile';
 
@@ -15,6 +16,7 @@ function App() {
         <Route path='/login' element={<Login />} />
         <Route path='/csv' element={<CsvPage/>} />
         <Route path='/editprofile' element={<EditProfile />} />
+        <Route path='/home' element={<Home />} />
       </Routes>
     </BrowserRouter>
   );
