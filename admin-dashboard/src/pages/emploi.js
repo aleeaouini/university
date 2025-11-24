@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo } from "react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import styled, { createGlobalStyle, ThemeProvider } from "styled-components";
 import jsPDF from "jspdf";
-import "jspdf-autotable";
 import axiosClient from "../api/axiosClient";
 
 // ================= THEMES =================
@@ -426,6 +425,182 @@ export default function Emploi() {
     }
   };
 
+  // ================= PDF DOWNLOAD FUNCTION - VISUAL TIMETABLE =================
+  const downloadPDF = () => {
+    if (!selectedGroupe) {
+      setError("Please select a group first");
+      return;
+    }
+
+    try {
+      const doc = new jsPDF();
+      const groupName = baseData.groupes.find(g => g.id == selectedGroupe)?.nom || "Group";
+      
+      // Configuration de la grille
+      const startX = 20;
+      const startY = 40;
+      const cellWidth = 28;
+      const cellHeight = 15;
+      const days = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"];
+      const dayNames = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+      
+      // Titre principal
+      doc.setFontSize(18);
+      doc.setFont(undefined, 'bold');
+      doc.text(`WEEKLY SCHEDULE - ${groupName.toUpperCase()}`, 105, 20, { align: 'center' });
+      
+      // Sous-titre
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'normal');
+      doc.text(`Generated on ${new Date().toLocaleDateString()}`, 105, 28, { align: 'center' });
+      
+      // En-têtes des jours
+      doc.setFontSize(9);
+      doc.setFont(undefined, 'bold');
+      days.forEach((day, index) => {
+        doc.text(day, startX + (index * cellWidth) + (cellWidth / 2), startY - 8, { align: 'center' });
+      });
+      
+      // En-têtes des heures et grille
+      doc.setFontSize(8);
+      doc.setFont(undefined, 'normal');
+      
+      timeSlots.forEach((slot, index) => {
+        const yPos = startY + (index * cellHeight);
+        
+        // Heure
+        doc.text(slot.start, startX - 12, yPos + (cellHeight / 2));
+        
+        // Ligne horizontale
+        doc.setDrawColor(200, 200, 200);
+        doc.line(startX, yPos, startX + (6 * cellWidth), yPos);
+      });
+      
+      // Lignes verticales (jours)
+      for (let i = 0; i <= 6; i++) {
+        doc.line(startX + (i * cellWidth), startY, startX + (i * cellWidth), startY + (timeSlots.length * cellHeight));
+      }
+      
+      // Remplir avec les séances
+      dayNames.forEach((dayName, dayIndex) => {
+        const daySessions = schedule[dayName] || [];
+        
+        timeSlots.forEach((slot, timeIndex) => {
+          const session = daySessions.find(s => s.heure_debut === slot.start);
+          
+          if (session) {
+            const x = startX + (dayIndex * cellWidth) + 1;
+            const y = startY + (timeIndex * cellHeight) + 1;
+            const width = cellWidth - 2;
+            const height = cellHeight - 2;
+            
+            // Fond coloré pour la séance
+            doc.setFillColor(230, 240, 255);
+            doc.rect(x, y, width, height, 'F');
+            
+            // Bordure
+            doc.setDrawColor(74, 144, 226);
+            doc.setLineWidth(0.3);
+            doc.rect(x, y, width, height);
+            
+            // Texte de la séance
+            doc.setFontSize(6);
+            doc.setTextColor(0, 0, 0);
+            
+            // Matière (première ligne)
+            const subject = session.matiere?.nom || `Subject ${session.id_matiere}`;
+            const shortSubject = subject.length > 18 ? subject.substring(0, 18) + '...' : subject;
+            doc.text(shortSubject, x + 2, y + 3);
+            
+            // Salle (deuxième ligne)
+            doc.setFont(undefined, 'bold');
+            const room = session.salle?.numero || session.id_salle;
+            doc.text(`Room: ${room}`, x + 2, y + 6);
+            
+            // Enseignant (troisième ligne)
+            doc.setFont(undefined, 'normal');
+            const teacherName = session.enseignant?.prenom ? 
+              `${session.enseignant.prenom.charAt(0)}. ${session.enseignant.nom}` : 
+              session.enseignant?.nom || 'Teacher';
+            const shortTeacher = teacherName.length > 16 ? teacherName.substring(0, 16) + '...' : teacherName;
+            doc.text(shortTeacher, x + 2, y + 9);
+            
+            // Heure (quatrième ligne)
+            doc.setFontSize(5);
+            doc.text(`${slot.start}-${slot.end}`, x + 2, y + 12);
+          }
+        });
+      });
+      
+      // Ligne horizontale finale
+      doc.setDrawColor(200, 200, 200);
+      doc.line(startX, startY + (timeSlots.length * cellHeight), startX + (6 * cellWidth), startY + (timeSlots.length * cellHeight));
+      
+      // Informations supplémentaires
+      const infoY = startY + (timeSlots.length * cellHeight) + 15;
+      
+      // Statistiques
+      const totalSessions = Object.values(schedule).flat().length;
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'bold');
+      doc.text("Schedule Summary:", 20, infoY);
+      
+      doc.setFont(undefined, 'normal');
+      doc.setFontSize(9);
+      doc.text(`• Group: ${groupName}`, 22, infoY + 6);
+      doc.text(`• Total Sessions: ${totalSessions}`, 22, infoY + 12);
+      doc.text(`• Period: ${timeSlots[0]?.start} - ${timeSlots[timeSlots.length-1]?.end}`, 22, infoY + 18);
+      
+      // Légende
+      const legendX = 110;
+      doc.setFont(undefined, 'bold');
+      doc.text("Legend:", legendX, infoY);
+      doc.setFont(undefined, 'normal');
+      doc.text("• Each cell represents a class session", legendX, infoY + 6);
+      doc.text("• Session includes: Subject, Room, Teacher, Time", legendX, infoY + 12);
+      
+      // Liste détaillée des sessions (si espace)
+      const detailsY = infoY + 25;
+      let currentY = detailsY;
+      
+      doc.setFont(undefined, 'bold');
+      doc.text("Detailed Sessions:", 20, currentY);
+      currentY += 6;
+      
+      doc.setFont(undefined, 'normal');
+      doc.setFontSize(8);
+      
+      Object.entries(schedule).forEach(([day, sessions]) => {
+        if (sessions.length > 0 && currentY < 270) {
+          sessions.forEach(session => {
+            if (currentY < 270) {
+              const sessionText = `${day.toUpperCase()} ${session.heure_debut}-${session.heure_fin}: ${session.matiere?.nom} (Room ${session.salle?.numero}) - ${session.enseignant?.prenom} ${session.enseignant?.nom}`;
+              const maxLength = 75;
+              const displayText = sessionText.length > maxLength ? 
+                sessionText.substring(0, maxLength) + '...' : sessionText;
+              
+              doc.text(displayText, 22, currentY);
+              currentY += 4;
+            }
+          });
+          currentY += 2; // Espace entre les jours
+        }
+      });
+      
+      // Pied de page
+      doc.setFontSize(7);
+      doc.setTextColor(128, 128, 128);
+      doc.text("University Schedule Management System - Generated Automatically", 105, 285, { align: 'center' });
+      
+      doc.save(`schedule_${groupName.replace(/\s+/g, '_')}.pdf`);
+      setSuccess("📅 Schedule PDF downloaded successfully!");
+      
+    } catch (error) {
+      console.error("Error generating schedule PDF:", error);
+      setError("Failed to generate schedule PDF. Please try again.");
+    }
+  };
+
   // ================= MODAL SUBMIT UNIFIÉ =================
   const handleModalSubmit = async e => {
     e.preventDefault();
@@ -614,50 +789,6 @@ export default function Emploi() {
     loadGroupData();
   }, [selectedGroupe]);
 
-  const downloadPDF = () => {
-    if (!selectedGroupe) {
-      setError("Please select a group first");
-      return;
-    }
-
-    const doc = new jsPDF();
-    const groupName = baseData.groupes.find(g => g.id == selectedGroupe)?.nom || "Group";
-    
-    doc.setFontSize(20);
-    doc.text(`Schedule - ${groupName}`, 14, 22);
-    doc.setFontSize(12);
-    doc.text(`Generated on ${new Date().toLocaleDateString()}`, 14, 30);
-    
-    const tableCols = ["Day", "Time", "Subject", "Room", "Teacher"];
-    const tableRows = [];
-    
-    Object.entries(schedule).forEach(([day, classes]) => {
-      classes.forEach(cls => {
-        tableRows.push([
-          day.toUpperCase(),
-          `${cls.heure_debut}-${cls.heure_fin}`,
-          cls.matiere?.nom || `Subject ${cls.id_matiere}`,
-          cls.salle?.numero || cls.id_salle || "",
-          `${cls.enseignant?.prenom || ""} ${cls.enseignant?.nom || ""}`.trim()
-        ]);
-      });
-    });
-    
-    if (tableRows.length === 0) {
-      tableRows.push(["No scheduled sessions found", "", "", "", ""]);
-    }
-    
-    doc.autoTable({ 
-      head: [tableCols], 
-      body: tableRows,
-      startY: 40,
-      styles: { fontSize: 10 },
-      headStyles: { fillColor: [74, 144, 226] }
-    });
-    
-    doc.save(`schedule_${groupName.replace(/\s+/g, '_')}.pdf`);
-  };
-
   const refreshData = async () => {
     if (selectedGroupe) {
       try {
@@ -699,7 +830,7 @@ export default function Emploi() {
             </Button>
             
             <Button variant="success" onClick={downloadPDF} disabled={!selectedGroupe}>
-              📄 Download PDF
+              📄 Download Schedule
             </Button>
 
             <Button onClick={refreshData} disabled={!selectedGroupe}>
