@@ -17,7 +17,6 @@ class SigninRequest(BaseModel):
 
 
 
-
 class UserResponse(BaseModel):
     id: int
     cin: str
