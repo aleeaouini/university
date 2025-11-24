@@ -71,7 +71,6 @@ class Departement(Base):
     nom = Column(String(100), unique=True, nullable=False)
     id_chef = Column(Integer, ForeignKey("chef.id"), nullable=True)
 
-    enseignants = relationship("Enseignant", back_populates="departement")
     specialites = relationship("Specialite", back_populates="departement")
     chef = relationship("Chef", back_populates="departements")
 
@@ -233,3 +232,20 @@ class Evenement(Base):
     # Many-to-many relationships
     etudiants = relationship("Etudiant", secondary=evenement_etudiants, backref="evenements")
     enseignants = relationship("Enseignant", secondary=evenement_enseignants, backref="evenements")
+
+class MessEnsAbs(Base):
+    __tablename__ = "mess_ens_abs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    
+    id_enseignant = Column(Integer, ForeignKey("enseignant.id"), nullable=False)
+    id_chef = Column(Integer, ForeignKey("chef.id"), nullable=False)   
+    id_seance = Column(Integer, ForeignKey("seance.id"), nullable=True)  
+    
+    contenu = Column(String(1000), nullable=False)
+    file_path = Column(String(255), nullable=True)
+    date = Column(Date, nullable=False)
+
+    enseignant = relationship("Enseignant", backref="messages_abs")
+    chef = relationship("Chef", backref="messages_abs")   
+    seance = relationship("Seance", backref="messages_abs")
