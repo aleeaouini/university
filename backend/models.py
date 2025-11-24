@@ -1,6 +1,9 @@
 from sqlalchemy import Index
 from sqlalchemy import Column, Integer, String, Date, Time, ForeignKey, Boolean, PrimaryKeyConstraint
 from sqlalchemy.orm import relationship
+from sqlalchemy import Table, Column, Integer, String, Date, ForeignKey
+from sqlalchemy.orm import relationship
+
 from database import Base
 
 
@@ -26,8 +29,8 @@ class Etudiant(Base):
     __tablename__ = "etudiant"
 
     id = Column(Integer, ForeignKey("utilisateur.id"), primary_key=True)
-    id_groupe = Column(Integer, ForeignKey("groupe.id"), nullable=False)
-    id_specialite = Column(Integer, ForeignKey("specialite.id"), nullable=False)
+    id_groupe = Column(Integer, ForeignKey("groupe.id"), nullable=True)
+    id_specialite = Column(Integer, ForeignKey("specialite.id"), nullable=True)
 
     utilisateur = relationship("Utilisateur", back_populates="etudiant")
     groupe = relationship("Groupe", back_populates="etudiants")
@@ -71,7 +74,6 @@ class Departement(Base):
     nom = Column(String(100), unique=True, nullable=False)
     id_chef = Column(Integer, ForeignKey("chef.id"), nullable=True)
 
-    enseignants = relationship("Enseignant", back_populates="departement")
     specialites = relationship("Specialite", back_populates="departement")
     chef = relationship("Chef", back_populates="departements")
 
@@ -80,8 +82,9 @@ class Specialite(Base):
     __tablename__ = "specialite"
 
     id = Column(Integer, primary_key=True, index=True)
-    nom = Column(String(100), unique=True, nullable=False)
+    nom = Column(String(100), unique=False, nullable=False)
     id_departement = Column(Integer, ForeignKey("departement.id"), nullable=False)
+    
 
     departement = relationship("Departement", back_populates="specialites")
     niveaux = relationship("Niveau", back_populates="specialite")
@@ -92,7 +95,7 @@ class Niveau(Base):
     __tablename__ = "niveau"
 
     id = Column(Integer, primary_key=True, index=True)
-    nom = Column(String(50), unique=True, nullable=False)
+    nom = Column(String(50), unique=False, nullable=False)
     id_specialite = Column(Integer, ForeignKey("specialite.id"), nullable=False)
 
     specialite = relationship("Specialite", back_populates="niveaux")
@@ -129,11 +132,11 @@ class Salle(Base):
     __tablename__ = "salle"
 
     id = Column(Integer, primary_key=True, index=True)
-    type = Column(String(100), nullable=False)
-    capacite = Column(Integer, nullable=False)
+    numero = Column(String(50), nullable=False)
+    type = Column(String(100), nullable=False, default="cours")
+    capacite = Column(Integer, nullable=False, default=30)
 
     seances = relationship("Seance", back_populates="salle")
-
 class Seance(Base):
     __tablename__ = "seance"
 
@@ -192,15 +195,12 @@ class Message(Base):
     id_destinataire = Column(Integer, ForeignKey("utilisateur.id"), nullable=False)
 
     contenu = Column(String(1000), nullable=False)
-    date = Column(Date, nullable=False)
+    date = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     expediteur = relationship("Utilisateur", foreign_keys=[id_expediteur])
     destinataire = relationship("Utilisateur", foreign_keys=[id_destinataire])
 
 
-
-from sqlalchemy import Table, Column, Integer, String, Date, ForeignKey
-from sqlalchemy.orm import relationship
 
 # Association table for students registering for events
 evenement_etudiants = Table(
