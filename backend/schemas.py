@@ -1,5 +1,7 @@
 from pydantic import BaseModel, EmailStr
 from typing import Optional
+from datetime import date
+
 
 
 
@@ -27,7 +29,7 @@ class UserResponse(BaseModel):
     role: Optional[str] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 
@@ -38,7 +40,7 @@ class EtudiantResponse(BaseModel):
     id_specialite: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 
@@ -48,7 +50,7 @@ class EnseignantResponse(BaseModel):
     id_departement: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 
@@ -57,7 +59,7 @@ class ChefResponse(BaseModel):
     date_nomination: Optional[str] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 
@@ -66,4 +68,12 @@ class AdministratifResponse(BaseModel):
     poste: Optional[str] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
+
+class MessEnsAbsCreate(BaseModel):
+    id_enseignant: int
+    id_chef: int                 
+    contenu: str
+    id_seance: Optional[int] = None
+    file_path: Optional[str] = None
+    date: date
