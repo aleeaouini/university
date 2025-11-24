@@ -1,0 +1,35 @@
+<div class="chat-container">
+    {{#if messages.length}}
+        {{#each messages}}
+        <div class="message-card">
+            <div class="message-header">
+                <div class="sender-info">
+                    <div class="sender-avatar">
+                        {{#if expediteur.nom}}
+                            {{expediteur.nom}}
+                        {{else}}
+                            U
+                        {{/if}}
+                    </div>
+                    <div>
+                        <div class="sender-name">{{expediteur.nom}} {{expediteur.prenom}}</div>
+                        <div class="message-time">{{date}}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="message-preview">
+                {{contenu}}
+            </div>
+            <a href="/chat/{{../userId}}/{{expediteur.id}}" class="conversation-link">
+                Voir la conversation →
+            </a>
+        </div>
+        {{/each}}
+    {{else}}
+        <div class="empty-state">
+            <div>📭</div>
+            <h3>Aucun message</h3>
+            <p>Vous n'avez aucun message dans votre boîte de réception.</p>
+        </div>
+    {{/if}}
+</div>
