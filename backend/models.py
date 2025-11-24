@@ -195,7 +195,7 @@ class Message(Base):
     id_destinataire = Column(Integer, ForeignKey("utilisateur.id"), nullable=False)
 
     contenu = Column(String(1000), nullable=False)
-    date = Column(Date, nullable=False)
+    date = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     expediteur = relationship("Utilisateur", foreign_keys=[id_expediteur])
     destinataire = relationship("Utilisateur", foreign_keys=[id_destinataire])
