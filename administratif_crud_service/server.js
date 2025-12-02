@@ -301,6 +301,51 @@ app.get('/groupes', (req, res) => {
   });
 });
 
+// Nouvelle route pour récupérer les groupes avec leurs spécialités complètes
+app.get('/groupes-with-specialites', (req, res) => {
+  const sql = `
+    SELECT g.*, s.id as specialite_id, s.nom as specialite_nom, 
+           d.nom as departement_nom, n.id as niveau_id, n.nom as niveau_nom
+    FROM groupe g
+    LEFT JOIN niveau n ON g.id_niveau = n.id
+    LEFT JOIN specialite s ON n.id_specialite = s.id
+    LEFT JOIN departement d ON s.id_departement = d.id
+  `;
+  connection.query(sql, (err, rows) => {
+    if (err) return sendError(res, err);
+    res.json(rows);
+  });
+});
+
+// Route pour récupérer la spécialité automatique d'un groupe
+app.get('/groupes/:id/specialite-auto', (req, res) => {
+  const groupId = req.params.id;
+  
+  const sql = `
+    SELECT s.id as specialite_id, s.nom as specialite_nom,
+           n.id as niveau_id, n.nom as niveau_nom
+    FROM groupe g
+    JOIN niveau n ON g.id_niveau = n.id
+    JOIN specialite s ON n.id_specialite = s.id
+    WHERE g.id = ?
+  `;
+  
+  connection.query(sql, [groupId], (err, rows) => {
+    if (err) return sendError(res, err);
+    
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Aucune spécialité trouvée pour ce groupe' });
+    }
+    
+    res.json({
+      id_specialite: rows[0].specialite_id,
+      specialite_nom: rows[0].specialite_nom,
+      id_niveau: rows[0].niveau_id,
+      niveau_nom: rows[0].niveau_nom
+    });
+  });
+});
+
 app.post('/groupes', (req, res) => {
   const { nom_niveau, nom_specialite } = req.body;
   if (!nom_niveau || !nom_specialite) return res.status(400).json({ error: 'nom_niveau and nom_specialite are required' });
@@ -740,6 +785,7 @@ app.post('/seances', async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+
 /* ---------------- UPDATE SEANCE ---------------- */
 app.put('/seances/:id', (req, res) => {
   const seanceId = req.params.id;
@@ -875,6 +921,7 @@ app.put('/seances/:id', (req, res) => {
     });
   });
 });
+
 /* ---------------- DELETE SEANCE ---------------- */
 app.delete('/seances/:id', (req, res) => {
   const seanceId = req.params.id;
@@ -964,12 +1011,18 @@ app.delete('/enseignants/:id', (req, res) => {
 });
 
 /* ---------------- ETUDIANTS ---------------- */
+
 app.get('/etudiants', (req, res) => {
   const sql = `
-    SELECT e.*, u.nom, u.prenom, g.nom AS groupe 
+    SELECT e.*, u.nom, u.prenom, u.email, u.cin, u.telp, 
+           g.nom AS groupe, g.id_niveau,
+           n.nom AS niveau_nom, 
+           s.id AS specialite_id, s.nom AS specialite_nom
     FROM etudiant e 
     LEFT JOIN utilisateur u ON e.id = u.id 
     LEFT JOIN groupe g ON e.id_groupe = g.id
+    LEFT JOIN niveau n ON g.id_niveau = n.id
+    LEFT JOIN specialite s ON n.id_specialite = s.id
   `;
   connection.query(sql, (err, rows) => {
     if (err) return sendError(res, err);
@@ -977,34 +1030,226 @@ app.get('/etudiants', (req, res) => {
   });
 });
 
-app.post('/etudiants', (req, res) => {
-  const { nom, prenom, id_groupe } = req.body;
-  if (!nom || !prenom || !id_groupe) return res.status(400).json({ error: 'nom, prenom, id_groupe required' });
-
-  const conflictSql = 'SELECT * FROM utilisateur WHERE nom = ? AND prenom = ?';
-  connection.query(conflictSql, [nom, prenom], (err, rows) => {
+// Route pour récupérer la spécialité automatique d'un groupe
+app.get('/groupes/:id/specialite-auto', (req, res) => {
+  const groupId = req.params.id;
+  
+  const sql = `
+    SELECT s.id as specialite_id, s.nom as specialite_nom,
+           n.id as niveau_id, n.nom as niveau_nom
+    FROM groupe g
+    JOIN niveau n ON g.id_niveau = n.id
+    JOIN specialite s ON n.id_specialite = s.id
+    WHERE g.id = ?
+  `;
+  
+  connection.query(sql, [groupId], (err, rows) => {
     if (err) return sendError(res, err);
-    if (rows.length > 0) return res.status(400).json({ error: 'Etudiant already exists' });
+    
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Aucune spécialité trouvée pour ce groupe' });
+    }
+    
+    res.json({
+      id_specialite: rows[0].specialite_id,
+      specialite_nom: rows[0].specialite_nom,
+      id_niveau: rows[0].niveau_id,
+      niveau_nom: rows[0].niveau_nom
+    });
+  });
+});
 
-    connection.query('INSERT INTO utilisateur (nom, prenom) VALUES (?, ?)', [nom, prenom], (err, result) => {
+// NOUVELLE route POST pour étudiants avec gestion AUTOMATIQUE de la spécialité
+app.post('/etudiants', (req, res) => {
+  const { nom, prenom, email, cin, telp, id_groupe } = req.body;
+  
+  // Validation des champs requis
+  if (!nom || !prenom || !id_groupe) {
+    return res.status(400).json({ error: 'nom, prenom, and id_groupe are required' });
+  }
+
+  // Vérifier si l'utilisateur existe déjà
+  const conflictSql = `
+    SELECT * FROM utilisateur 
+    WHERE (nom = ? AND prenom = ?) OR email = ? OR cin = ?
+  `;
+  
+  connection.query(conflictSql, [nom, prenom, email, cin], (err, rows) => {
+    if (err) return sendError(res, err);
+    if (rows.length > 0) {
+      return res.status(400).json({ error: 'Student with same name, email or CIN already exists' });
+    }
+
+    // ÉTAPE 1: Récupérer AUTOMATIQUEMENT la spécialité via les relations
+    // Groupe → Niveau → Spécialité
+    const getSpecialiteSql = `
+      SELECT s.id as specialite_id, s.nom as specialite_nom,
+             n.id as niveau_id, n.nom as niveau_nom
+      FROM groupe g
+      JOIN niveau n ON g.id_niveau = n.id
+      JOIN specialite s ON n.id_specialite = s.id
+      WHERE g.id = ?
+    `;
+    
+    connection.query(getSpecialiteSql, [id_groupe], (err, specialiteResult) => {
       if (err) return sendError(res, err);
-      const id = result.insertId;
-      connection.query('INSERT INTO etudiant (id, id_groupe) VALUES (?, ?)', [id, id_groupe], (err2) => {
-        if (err2) return sendError(res, err2);
-        res.status(201).json({ message: 'Etudiant ajouté', id });
+      
+      if (specialiteResult.length === 0) {
+        return res.status(400).json({ 
+          error: 'Groupe sélectionné non trouvé ou sans niveau/spécialité associée' 
+        });
+      }
+
+      const id_specialite = specialiteResult[0].specialite_id;
+      const specialite_nom = specialiteResult[0].specialite_nom;
+      const id_niveau = specialiteResult[0].niveau_id;
+      const niveau_nom = specialiteResult[0].niveau_nom;
+
+      console.log(`🎯 Relations trouvées:`);
+      console.log(`   Groupe: ${id_groupe} → Niveau: ${niveau_nom} (${id_niveau}) → Spécialité: ${specialite_nom} (${id_specialite})`);
+
+      // ÉTAPE 2: Insérer dans utilisateur
+      const userSql = `
+        INSERT INTO utilisateur 
+        (nom, prenom, email, cin, telp, role) 
+        VALUES (?, ?, ?, ?, ?, 'etudiant')
+      `;
+      
+      connection.query(userSql, [nom, prenom, email || null, cin || null, telp || null], (err, result) => {
+        if (err) return sendError(res, err);
+        
+        const id = result.insertId;
+        
+        // ÉTAPE 3: Insérer dans etudiant avec la spécialité AUTOMATIQUE
+        const studentSql = `
+          INSERT INTO etudiant 
+          (id, id_groupe, id_specialite) 
+          VALUES (?, ?, ?)
+        `;
+        
+        connection.query(studentSql, [id, id_groupe, id_specialite], (err2) => {
+          if (err2) {
+            // Rollback en cas d'erreur
+            connection.query('DELETE FROM utilisateur WHERE id = ?', [id]);
+            return sendError(res, err2);
+          }
+          
+          res.status(201).json({ 
+            message: 'Étudiant ajouté avec succès', 
+            id,
+            id_groupe,
+            id_specialite,
+            specialite_nom,
+            id_niveau,
+            niveau_nom
+          });
+        });
       });
     });
   });
 });
 
+// NOUVELLE route PUT pour étudiants avec gestion AUTOMATIQUE de la spécialité
 app.put('/etudiants/:id', (req, res) => {
-  const { nom, prenom, id_groupe } = req.body;
-  connection.query('UPDATE utilisateur SET nom = ?, prenom = ? WHERE id = ?', [nom, prenom, req.params.id], (err) => {
+  const { nom, prenom, email, cin, telp, id_groupe } = req.body;
+  
+  if (!nom || !prenom) {
+    return res.status(400).json({ error: 'nom and prenom are required' });
+  }
+
+  // Vérifier les conflits d'email/CIN
+  const conflictSql = `
+    SELECT * FROM utilisateur 
+    WHERE (email = ? OR cin = ?) AND id != ?
+  `;
+  
+  connection.query(conflictSql, [email, cin, req.params.id], (err, rows) => {
     if (err) return sendError(res, err);
-    connection.query('UPDATE etudiant SET id_groupe = ? WHERE id = ?', [id_groupe, req.params.id], (err2) => {
-      if (err2) return sendError(res, err2);
-      res.json({ message: 'Etudiant modifié' });
-    });
+    if (rows.length > 0) {
+      return res.status(400).json({ error: 'Email or CIN already exists for another user' });
+    }
+
+    // Si le groupe est modifié, récupérer AUTOMATIQUEMENT la nouvelle spécialité
+    if (id_groupe) {
+      const getSpecialiteSql = `
+        SELECT s.id as specialite_id, s.nom as specialite_nom,
+               n.id as niveau_id, n.nom as niveau_nom
+        FROM groupe g
+        JOIN niveau n ON g.id_niveau = n.id
+        JOIN specialite s ON n.id_specialite = s.id
+        WHERE g.id = ?
+      `;
+      
+      connection.query(getSpecialiteSql, [id_groupe], (err, specialiteResult) => {
+        if (err) return sendError(res, err);
+        
+        if (specialiteResult.length === 0) {
+          return res.status(400).json({ error: 'Selected group not found' });
+        }
+
+        const id_specialite = specialiteResult[0].specialite_id;
+        const specialite_nom = specialiteResult[0].specialite_nom;
+        const id_niveau = specialiteResult[0].niveau_id;
+        const niveau_nom = specialiteResult[0].niveau_nom;
+
+        console.log(`🔄 Mise à jour automatique des relations:`);
+        console.log(`   Groupe: ${id_groupe} → Niveau: ${niveau_nom} → Spécialité: ${specialite_nom}`);
+
+        updateStudent(id_specialite, specialite_nom, id_niveau, niveau_nom);
+      });
+    } else {
+      // Pas de changement de groupe, garder l'ancienne spécialité
+      updateStudent(null, null, null, null);
+    }
+
+    function updateStudent(specialiteId, specialiteNom, niveauId, niveauNom) {
+      // Mettre à jour utilisateur
+      const userSql = `
+        UPDATE utilisateur 
+        SET nom = ?, prenom = ?, email = ?, cin = ?, telp = ? 
+        WHERE id = ?
+      `;
+      
+      connection.query(userSql, [nom, prenom, email || null, cin || null, telp || null, req.params.id], (err) => {
+        if (err) return sendError(res, err);
+        
+        // Mettre à jour etudiant avec la spécialité AUTOMATIQUE
+        let studentSql, studentParams;
+        
+        if (id_groupe && specialiteId) {
+          studentSql = `
+            UPDATE etudiant 
+            SET id_groupe = ?, id_specialite = ? 
+            WHERE id = ?
+          `;
+          studentParams = [id_groupe, specialiteId, req.params.id];
+        } else if (id_groupe) {
+          // Garder l'ancienne spécialité si seul le groupe change
+          studentSql = `
+            UPDATE etudiant 
+            SET id_groupe = ? 
+            WHERE id = ?
+          `;
+          studentParams = [id_groupe, req.params.id];
+        } else {
+          // Pas de changement de groupe
+          res.json({ message: 'Étudiant modifié' });
+          return;
+        }
+        
+        connection.query(studentSql, studentParams, (err2) => {
+          if (err2) return sendError(res, err2);
+          res.json({ 
+            message: 'Étudiant modifié avec succès',
+            id_groupe,
+            id_specialite: specialiteId,
+            specialite_nom: specialiteNom,
+            id_niveau: niveauId,
+            niveau_nom: niveauNom
+          });
+        });
+      });
+    }
   });
 });
 
@@ -1013,7 +1258,7 @@ app.delete('/etudiants/:id', (req, res) => {
     if (err) return sendError(res, err);
     connection.query('DELETE FROM utilisateur WHERE id = ?', [req.params.id], (err2) => {
       if (err2) return sendError(res, err2);
-      res.json({ message: 'Etudiant supprimé' });
+      res.json({ message: 'Étudiant supprimé' });
     });
   });
 });
@@ -1088,7 +1333,6 @@ async function startServer() {
     app.listen(PORT, () => {
       console.log(`🚀 Admin service lancé sur http://localhost:${PORT}`);
       console.log(`📊 GraphQL endpoint: http://localhost:${PORT}/graphql`);
-      console.log('🔧 Using REST API for data operations');
     });
   } catch (error) {
     console.error('Error starting Apollo Server:', error);

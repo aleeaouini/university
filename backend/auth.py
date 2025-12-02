@@ -203,7 +203,10 @@ def signin(req: schemas.SigninRequest, db: Session = Depends(get_db)):
             roles.append("administratif")
 
         # Create access token
-        token = auth_utils.create_access_token({"sub": user.email, "roles": roles})
+        token = auth_utils.create_access_token({
+            "sub": user.email,
+             "id": user.id,
+             "roles": roles})
 
         return {
             "access_token": token,
@@ -222,3 +225,5 @@ def signin(req: schemas.SigninRequest, db: Session = Depends(get_db)):
     except Exception as e:
         logger.exception(f"[signin] Unexpected error: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
+    
+

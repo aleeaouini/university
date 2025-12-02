@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import axiosClient from "../api/axiosClient";
-import { UserCheck, Plus, Edit2, Trash2, Search, X, Mail, Phone, Users } from "lucide-react";
+import { UserCheck, Plus, Edit2, Trash2, Search, X, Mail, Phone, Users, BookOpen } from "lucide-react";
 
 function Students() {
   const [students, setStudents] = useState([]);
@@ -11,14 +11,16 @@ function Students() {
     email: "",
     cin: "",
     telp: "",
-    name_groupe: "",
+    id_groupe: "",
+    specialite: "" // Just for display
   });
 
   const [editId, setEditId] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  // Fetch students
+  // Fetch students with specialites
   const fetchStudents = async () => {
     try {
       setIsLoading(true);
@@ -26,18 +28,20 @@ function Students() {
       setStudents(res.data);
     } catch (error) {
       console.error("Error fetching students:", error);
+      setError("Failed to load students");
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Fetch groups list
+  // Fetch groups with specialites
   const fetchGroups = async () => {
     try {
-      const res = await axiosClient.get("/groupes");
+      const res = await axiosClient.get("/groupes-with-specialites");
       setGroups(res.data);
     } catch (error) {
-      console.error("Error loading groupes:", error);
+      console.error("Error loading groups:", error);
+      setError("Failed to load groups");
     }
   };
 
@@ -46,43 +50,102 @@ function Students() {
     fetchGroups();
   }, []);
 
-  const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+  const handleChange = async (e) => {
+    const { name, value } = e.target;
+    setForm(prev => ({ 
+      ...prev, 
+      [name]: value 
+    }));
+    
+    // Si le groupe change, récupérer AUTOMATIQUEMENT la spécialité
+    if (name === "id_groupe" && value) {
+      try {
+        const response = await axiosClient.get(`/groupes/${value}/specialite-auto`);
+        setForm(prev => ({
+          ...prev,
+          specialite: response.data.specialite_nom
+        }));
+      } catch (error) {
+        console.error("Error fetching specialite:", error);
+        setForm(prev => ({
+          ...prev,
+          specialite: "Specialité non trouvée"
+        }));
+      }
+    }
+    
+    setError("");
   };
 
   // Submit create/update
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.nom || !form.prenom || !form.email) return;
+    
+    // Validation des champs requis
+    if (!form.nom || !form.prenom || !form.id_groupe) {
+      setError("First name, last name, and group are required");
+      return;
+    }
 
     try {
       setIsLoading(true);
+      setError("");
+      
+      // Préparer les données pour le backend
+      const payload = {
+        nom: form.nom,
+        prenom: form.prenom,
+        email: form.email || null,
+        cin: form.cin || null,
+        telp: form.telp || null,
+        id_groupe: parseInt(form.id_groupe)
+      };
+
       if (editId) {
-        await axiosClient.put(`/etudiants/${editId}`, form);
+        await axiosClient.put(`/etudiants/${editId}`, payload);
       } else {
-        await axiosClient.post("/etudiants", form);
+        await axiosClient.post("/etudiants", payload);
       }
-      setForm({ nom: "", prenom: "", email: "", cin: "", telp: "", name_groupe: "" });
+      
+      // Réinitialiser le formulaire
+      setForm({ 
+        nom: "", 
+        prenom: "", 
+        email: "", 
+        cin: "", 
+        telp: "", 
+        id_groupe: "",
+        specialite: "" 
+      });
       setEditId(null);
       fetchStudents();
+      
     } catch (error) {
       console.error("Error saving student:", error);
+      const errorMessage = error.response?.data?.error || "Failed to save student";
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
   };
 
   // Set edit mode
-  const handleEdit = (s) => {
+  const handleEdit = (student) => {
+    // Trouver le groupe correspondant pour récupérer l'ID
+    const selectedGroup = groups.find(g => g.nom === student.groupe);
+    
     setForm({
-      nom: s.nom,
-      prenom: s.prenom,
-      email: s.email,
-      cin: s.cin || "",
-      telp: s.telp || "",
-      name_groupe: s.groupe || "",
+      nom: student.nom,
+      prenom: student.prenom,
+      email: student.email || "",
+      cin: student.cin || "",
+      telp: student.telp || "",
+      id_groupe: selectedGroup ? selectedGroup.id.toString() : "",
+      specialite: student.specialite_nom || student.specialite || ""
     });
-    setEditId(s.id);
+    
+    setEditId(student.id);
+    setError("");
     document.getElementById("student-form")?.scrollIntoView({ behavior: "smooth" });
   };
 
@@ -96,13 +159,14 @@ function Students() {
       fetchStudents();
     } catch (error) {
       console.error("Error deleting:", error);
+      setError("Failed to delete student");
     } finally {
       setIsLoading(false);
     }
   };
 
   const filteredStudents = students.filter((s) =>
-    [s.nom, s.prenom, s.email, s.groupe, s.specialite]
+    [s.nom, s.prenom, s.email, s.groupe, s.specialite_nom, s.specialite]
       .join(" ")
       .toLowerCase()
       .includes(searchTerm.toLowerCase())
@@ -160,9 +224,19 @@ function Students() {
 
               {editId && (
                 <button
+                  type="button"
                   onClick={() => {
-                    setForm({ nom: "", prenom: "", email: "", cin: "", telp: "", name_groupe: "" });
+                    setForm({ 
+                      nom: "", 
+                      prenom: "", 
+                      email: "", 
+                      cin: "", 
+                      telp: "", 
+                      id_groupe: "",
+                      specialite: "" 
+                    });
                     setEditId(null);
+                    setError("");
                   }}
                   className="cancel-edit-btn"
                 >
@@ -171,10 +245,16 @@ function Students() {
               )}
             </div>
 
+            {error && (
+              <div className="error-message">
+                {error}
+              </div>
+            )}
+
             <form onSubmit={handleSubmit} className="teacher-form">
 
               <div className="input-group">
-                <label>First Name</label>
+                <label>First Name *</label>
                 <input
                   type="text"
                   name="prenom"
@@ -182,11 +262,12 @@ function Students() {
                   onChange={handleChange}
                   className="form-input"
                   required
+                  disabled={isLoading}
                 />
               </div>
 
               <div className="input-group">
-                <label>Last Name</label>
+                <label>Last Name *</label>
                 <input
                   type="text"
                   name="nom"
@@ -194,6 +275,7 @@ function Students() {
                   onChange={handleChange}
                   className="form-input"
                   required
+                  disabled={isLoading}
                 />
               </div>
 
@@ -205,7 +287,7 @@ function Students() {
                   value={form.email}
                   onChange={handleChange}
                   className="form-input"
-                  required
+                  disabled={isLoading}
                 />
               </div>
 
@@ -217,6 +299,7 @@ function Students() {
                   value={form.cin}
                   onChange={handleChange}
                   className="form-input"
+                  disabled={isLoading}
                 />
               </div>
 
@@ -228,27 +311,48 @@ function Students() {
                   value={form.telp}
                   onChange={handleChange}
                   className="form-input"
+                  disabled={isLoading}
                 />
               </div>
 
               <div className="input-group">
-                <label>Group</label>
+                <label>Group *</label>
                 <select
-                  name="name_groupe"
-                  value={form.name_groupe}
+                  name="id_groupe"
+                  value={form.id_groupe}
                   onChange={handleChange}
                   className="form-input"
                   required
+                  disabled={isLoading}
                 >
                   <option value="">Select group</option>
                   {groups.map((g) => (
-                    <option key={g.id} value={g.nom}>{g.nom}</option>
+                    <option key={g.id} value={g.id}>
+                      {g.nom} 
+                      {g.specialite_nom && ` - ${g.specialite_nom}`}
+                      {g.niveau_nom && ` (${g.niveau_nom})`}
+                    </option>
                   ))}
                 </select>
               </div>
 
-              <button type="submit" className={`submit-btn ${editId ? "update" : "create"}`}>
-                {editId ? "Update Student" : "Create Student"}
+              {/* Specialite display (read-only) */}
+              <div className="input-group">
+                <label>Speciality (automatic)</label>
+                <div className="specialite-display">
+                  <BookOpen className="specialite-icon" />
+                  <span className={form.specialite ? "specialite-text" : "specialite-placeholder"}>
+                    {form.specialite || "Select a group to see speciality"}
+                  </span>
+                </div>
+              </div>
+
+              <button 
+                type="submit" 
+                className={`submit-btn ${editId ? "update" : "create"}`}
+                disabled={isLoading}
+              >
+                {isLoading ? "Processing..." : (editId ? "Update Student" : "Create Student")}
               </button>
 
             </form>
@@ -268,9 +372,15 @@ function Students() {
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="search-input"
+                disabled={isLoading}
               />
               {searchTerm && (
-                <button onClick={() => setSearchTerm("")} className="clear-search-btn">
+                <button 
+                  type="button"
+                  onClick={() => setSearchTerm("")} 
+                  className="clear-search-btn"
+                  disabled={isLoading}
+                >
                   <X />
                 </button>
               )}
@@ -292,37 +402,60 @@ function Students() {
                     <th>Contact</th>
                     <th>Group</th>
                     <th>Speciality</th>
+                    <th>Level</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
 
                 <tbody>
-                  {filteredStudents.map((s) => (
-                    <tr key={s.id}>
-                      <td>#{s.id}</td>
+                  {filteredStudents.map((student) => (
+                    <tr key={student.id}>
+                      <td>#{student.id}</td>
 
                       <td>
-                        {s.prenom} {s.nom}
-                        <div className="teacher-meta">{s.cin || "No CIN"}</div>
+                        {student.prenom} {student.nom}
+                        <div className="teacher-meta">{student.cin || "No CIN"}</div>
                       </td>
 
                       <td>
-                        <div className="contact-item"><Mail /> {s.email}</div>
-                        {s.telp && <div className="contact-item"><Phone /> {s.telp}</div>}
+                        <div className="contact-item">
+                          <Mail /> {student.email}
+                        </div>
+                        {student.telp && (
+                          <div className="contact-item">
+                            <Phone /> {student.telp}
+                          </div>
+                        )}
                       </td>
 
-                      <td>{s.groupe || "—"}</td>
-                      <td>{s.specialite || "—"}</td>
+                      <td>{student.groupe || "—"}</td>
+                      
+                      <td>
+                        <div className="specialite-badge">
+                          {student.specialite_nom || student.specialite || "—"}
+                        </div>
+                      </td>
 
                       <td>
-                        <button onClick={() => handleEdit(s)} className="action-btn edit-btn">
+                        {student.niveau_nom || "—"}
+                      </td>
+
+                      <td>
+                        <button 
+                          onClick={() => handleEdit(student)} 
+                          className="action-btn edit-btn"
+                          disabled={isLoading}
+                        >
                           <Edit2 /> Edit
                         </button>
-                        <button onClick={() => handleDelete(s.id)} className="action-btn delete-btn">
+                        <button 
+                          onClick={() => handleDelete(student.id)} 
+                          className="action-btn delete-btn"
+                          disabled={isLoading}
+                        >
                           <Trash2 /> Delete
                         </button>
                       </td>
-
                     </tr>
                   ))}
                 </tbody>
