@@ -49,32 +49,42 @@ function Subjects() {
     setEditId(null);
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!form.nom.trim() || !form.id_niveau) return;
+ // Replace your handleSubmit function with this:
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  if (!form.nom.trim() || !form.id_niveau) return;
 
-    const payload = {
-      nom: form.nom.trim(),
-      id_niveau: parseInt(form.id_niveau)
-    };
+  // Find the selected niveau to get its name and specialite
+  const selectedNiveau = niveaux.find(nv => nv.id === parseInt(form.id_niveau));
+  
+  if (!selectedNiveau) {
+    alert("Selected niveau not found");
+    return;
+  }
 
-    try {
-      setIsLoadingForm(true);
-      if (editId) {
-        await axiosClient.put(`/matieres/${editId}`, payload);
-        alert("Subject updated successfully!");
-      } else {
-        await axiosClient.post("/matieres", payload);
-        alert("Subject created successfully!");
-      }
-      resetForm();
-      fetchSubjects();
-    } catch (error) {
-      alert(error.response?.data?.error || "Failed to save subject");
-    } finally {
-      setIsLoadingForm(false);
-    }
+  const payload = {
+    nom: form.nom.trim(),
+    nom_niveau: selectedNiveau.nom,
+    nom_specialite: selectedNiveau.specialite || ""
   };
+
+  try {
+    setIsLoadingForm(true);
+    if (editId) {
+      await axiosClient.put(`/matieres/${editId}`, payload);
+      alert("Subject updated successfully!");
+    } else {
+      await axiosClient.post("/matieres", payload);
+      alert("Subject created successfully!");
+    }
+    resetForm();
+    fetchSubjects();
+  } catch (error) {
+    alert(error.response?.data?.error || "Failed to save subject");
+  } finally {
+    setIsLoadingForm(false);
+  }
+};
 
   const handleEdit = (s) => {
     setForm({

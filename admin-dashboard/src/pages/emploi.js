@@ -845,10 +845,7 @@ export default function Emploi() {
         {error && <ErrorMessage>{error}</ErrorMessage>}
         {success && <SuccessMessage>{success}</SuccessMessage>}
 
-        <DebugInfo>
-          <strong>Debug Info:</strong>
-          <pre>{debugInfo}</pre>
-        </DebugInfo>
+       
 
         <DragDropContext onDragEnd={onDragEnd}>
           <MainLayout>
